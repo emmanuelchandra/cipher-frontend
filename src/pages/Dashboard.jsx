@@ -37,7 +37,22 @@ const Dashboard = () => {
 
   useEffect(() => {
     api.get('/attendance/dashboard')
-      .then(r => setData(r.data))
+      .then(r => {
+        const raw = r.data;
+        const weekly = raw.weekly || [];
+        // Normalize backend field names → frontend field names
+        setData({
+          total_employees: raw.total_employees,
+          today_present:   raw.total_present   ?? raw.today_present,
+          today_late:      raw.total_late      ?? raw.today_late,
+          today_absent:    raw.total_absent    ?? raw.today_absent,
+          weekly_labels:   weekly.map(w => w.day  || w.date),
+          weekly_present:  weekly.map(w => w.present ?? 0),
+          weekly_late:     weekly.map(w => w.late    ?? 0),
+          // pass through anything else (top_late, my_attendance, etc.)
+          ...raw,
+        });
+      })
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, []);
