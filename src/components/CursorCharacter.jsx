@@ -9,101 +9,153 @@ const WALK_FRAMES = [
   '/sprites/walk_walk1-removebg-preview.png',
   '/sprites/walk_walk2-removebg-preview.png',
 ];
-// Run reuses walk frames at higher speed (no dedicated run sprites)
 const RUN_FRAMES = WALK_FRAMES;
 
-// --- Frame sizes (px) at 40% scale ---
-const IDLE_W = Math.round(307 * 0.4); // 123
-const WALK_W = Math.round(256 * 0.4); // 102
+const EMOTE_SUNGLASSES = '/sprites/emote_sunglasses-removebg-preview.png';
+const EMOTE_SLEEPING   = '/sprites/emote_sleeping-removebg-preview.png';
+const EMOTE_HUMMING    = '/sprites/emote_humming-removebg-preview.png';
+const EMOTE_THUMBSUP   = '/sprites/emote_thumbsup-removebg-preview.png';
+
+// --- Frame sizes at 40% scale ---
+const IDLE_W  = Math.round(307 * 0.4); // 123
+const WALK_W  = Math.round(256 * 0.4); // 102
 const HEIGHT  = Math.round(341 * 0.4); // 136
 
-// --- Velocity thresholds (px per RAF tick, ~16 ms) ---
+// --- Velocity thresholds (px/RAF tick ≈ 16ms) ---
 const WALK_THRESHOLD = 1.5;
 const RUN_THRESHOLD  = 9;
 
-// --- ms per frame for each animation ---
+// --- Animation intervals ---
 const IDLE_MS = 700;
 const WALK_MS = 160;
 const RUN_MS  = 80;
 
-// Lerp factor: how fast char catches up to cursor X (0–1)
+// --- Idle emote timers ---
+const HUMMING_AFTER_MS  = 10_000; // 10 s → humming
+const SLEEPING_AFTER_MS = 30_000; // 30 s → sleeping
+
+// Lerp: how quickly char catches cursor X
 const LERP = 0.1;
+
+// Anything matching this selector triggers hover emotes
+const BTN = 'button, a, [role="button"], input[type="submit"], input[type="button"]';
 
 const CursorCharacter = () => {
   const imgRef = useRef(null);
 
-  // All mutable animation state in one ref — never triggers re-renders
   const s = useRef({
-    targetX:    window.innerWidth / 2,
-    charX:      window.innerWidth / 2,
-    prevTarget: window.innerWidth / 2,
-    vel:        0,            // smoothed velocity
-    anim:       'idle',       // 'idle' | 'walk' | 'run'
-    frame:      0,
+    targetX:     window.innerWidth / 2,
+    charX:       window.innerWidth / 2,
+    prevTarget:  window.innerWidth / 2,
+    vel:         0,
+    anim:        'idle',   // 'idle' | 'walk' | 'run'
+    frame:       0,
     lastFrameAt: 0,
     facingRight: true,
-    raf:        null,
+    // Idle-time tracking
+    lastMovedAt: performance.now(),
+    // Button hover/press flags
+    hoverBtn:    false,
+    pressBtn:    false,
+    raf:         null,
   });
 
   useEffect(() => {
-    // Preload all frames so src swaps are instant (no flicker)
-    [...IDLE_FRAMES, ...WALK_FRAMES].forEach(src => {
-      const pre = new Image();
-      pre.src = src;
-    });
+    // Preload every sprite so src swaps never flicker
+    [
+      ...IDLE_FRAMES, ...WALK_FRAMES,
+      EMOTE_SUNGLASSES, EMOTE_SLEEPING, EMOTE_HUMMING, EMOTE_THUMBSUP,
+    ].forEach(src => { const p = new Image(); p.src = src; });
 
-    const r  = s.current;
+    const r   = s.current;
     const img = imgRef.current;
 
-    const onMouseMove = (e) => { r.targetX = e.clientX; };
-    window.addEventListener('mousemove', onMouseMove, { passive: true });
+    // --- Mouse tracking ---
+    const onMove = (e) => {
+      r.targetX    = e.clientX;
+      r.lastMovedAt = performance.now();
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
 
+    // --- Button hover detection (event delegation) ---
+    const onOver = (e) => { if (e.target.closest(BTN)) r.hoverBtn = true;  };
+    const onOut  = (e) => { if (e.target.closest(BTN)) r.hoverBtn = false; };
+    document.addEventListener('mouseover', onOver, { passive: true });
+    document.addEventListener('mouseout',  onOut,  { passive: true });
+
+    // --- Button press detection ---
+    const onDown = (e) => { if (e.target.closest(BTN)) r.pressBtn = true;  };
+    const onUp   = ()  => { r.pressBtn = false; };
+    document.addEventListener('mousedown', onDown, { passive: true });
+    document.addEventListener('mouseup',   onUp,   { passive: true });
+
+    // --- RAF loop ---
     const tick = (now) => {
-      // Raw delta then exponential smoothing to reduce jitter
+      // Velocity with EMA smoothing
       const rawDelta = r.targetX - r.prevTarget;
-      r.vel = r.vel * 0.65 + rawDelta * 0.35;
+      r.vel       = r.vel * 0.65 + rawDelta * 0.35;
       r.prevTarget = r.targetX;
 
-      // Choose animation state
-      const speed = Math.abs(r.vel);
-      const nextAnim =
+      // Movement animation state
+      const speed    = Math.abs(r.vel);
+      const moveAnim =
         speed < WALK_THRESHOLD ? 'idle' :
         speed < RUN_THRESHOLD  ? 'walk' : 'run';
 
-      if (nextAnim !== r.anim) {
-        r.anim       = nextAnim;
+      if (moveAnim !== r.anim) {
+        r.anim       = moveAnim;
         r.frame      = 0;
         r.lastFrameAt = now;
       }
 
-      // Facing direction — deadband ±0.4 px to avoid flip jitter at rest
-      if (r.vel >  0.4) r.facingRight = true;
+      // Facing direction (deadband avoids flip-jitter at rest)
+      if      (r.vel >  0.4) r.facingRight = true;
       else if (r.vel < -0.4) r.facingRight = false;
 
-      // Smooth follow
+      // Smooth position follow
       r.charX += (r.targetX - r.charX) * LERP;
 
-      // Resolve frames + timing for current anim
-      const frames =
-        r.anim === 'idle' ? IDLE_FRAMES :
-        r.anim === 'walk' ? WALK_FRAMES : RUN_FRAMES;
-      const msPerFrame =
-        r.anim === 'idle' ? IDLE_MS :
-        r.anim === 'walk' ? WALK_MS : RUN_MS;
-      const frameW =
-        r.anim === 'idle' ? IDLE_W : WALK_W;
+      // --- Determine what to draw ---
+      // Idle elapsed — only counts when character is in idle anim
+      const idleMs = r.anim === 'idle' ? now - r.lastMovedAt : 0;
 
-      // Advance frame on interval
-      if (now - r.lastFrameAt >= msPerFrame) {
-        r.frame = (r.frame + 1) % frames.length;
-        r.lastFrameAt = now;
+      // Priority: thumbsup > sunglasses > sleeping > humming > normal
+      let src, frameW;
+
+      if (r.pressBtn) {
+        src    = EMOTE_THUMBSUP;
+        frameW = IDLE_W;
+      } else if (r.hoverBtn) {
+        src    = EMOTE_SUNGLASSES;
+        frameW = IDLE_W;
+      } else if (idleMs >= SLEEPING_AFTER_MS) {
+        src    = EMOTE_SLEEPING;
+        frameW = IDLE_W;
+      } else if (idleMs >= HUMMING_AFTER_MS) {
+        src    = EMOTE_HUMMING;
+        frameW = IDLE_W;
+      } else {
+        // Normal walk / run / idle animation
+        const frames =
+          r.anim === 'idle' ? IDLE_FRAMES :
+          r.anim === 'walk' ? WALK_FRAMES : RUN_FRAMES;
+        const msPerFrame =
+          r.anim === 'idle' ? IDLE_MS :
+          r.anim === 'walk' ? WALK_MS : RUN_MS;
+        frameW = r.anim === 'idle' ? IDLE_W : WALK_W;
+
+        if (now - r.lastFrameAt >= msPerFrame) {
+          r.frame      = (r.frame + 1) % frames.length;
+          r.lastFrameAt = now;
+        }
+        src = frames[r.frame];
       }
 
-      // Write directly to DOM — no React state, no re-render
-      img.src              = frames[r.frame];
-      img.style.left       = `${r.charX}px`;
-      img.style.width      = `${frameW}px`;
-      img.style.transform  = `translateX(-50%) scaleX(${r.facingRight ? 1 : -1})`;
+      // Write to DOM
+      img.src             = src;
+      img.style.left      = `${r.charX}px`;
+      img.style.width     = `${frameW}px`;
+      img.style.transform = `translateX(-50%) scaleX(${r.facingRight ? 1 : -1})`;
 
       r.raf = requestAnimationFrame(tick);
     };
@@ -111,7 +163,11 @@ const CursorCharacter = () => {
     r.raf = requestAnimationFrame(tick);
 
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseover', onOver);
+      document.removeEventListener('mouseout',  onOut);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('mouseup',   onUp);
       cancelAnimationFrame(r.raf);
     };
   }, []);
@@ -135,7 +191,6 @@ const CursorCharacter = () => {
         transformOrigin: 'center bottom',
         willChange:      'transform, left',
         userSelect:      'none',
-        imageRendering:  'auto',
       }}
     />
   );
