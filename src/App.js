@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import CursorCharacter from './components/CursorCharacter';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -25,6 +26,7 @@ const Layout = ({ children }) => (
 
 const App = () => (
   <AuthProvider>
+    <CursorCharacter />
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
