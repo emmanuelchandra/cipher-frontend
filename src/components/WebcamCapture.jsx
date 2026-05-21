@@ -33,21 +33,29 @@ const WebcamCapture = ({ onCapture, buttonLabel }) => {
   const runDetection = useCallback(async () => {
     if (!webcamRef.current?.video || !canvasRef.current || !modelsLoaded) return;
     const video = webcamRef.current.video;
-    if (video.readyState !== 4) return;
+    // Wait until video is fully playing AND has real dimensions
+    if (video.readyState !== 4 || video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    const detections = await faceapi
-      .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-      .withFaceLandmarks();
+    try {
+      const detections = await faceapi
+        .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+        .withFaceLandmarks();
 
-    const dims = { width: video.videoWidth, height: video.videoHeight };
-    const canvas = canvasRef.current;
-    faceapi.matchDimensions(canvas, dims);
-    const resized = faceapi.resizeResults(detections, dims);
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    faceapi.draw.drawDetections(canvas, resized);
-    faceapi.draw.drawFaceLandmarks(canvas, resized);
-    setFaceDetected(detections.length === 1);
+      // Guard again — video may have been torn down while awaiting
+      if (!canvasRef.current) return;
+
+      const dims = { width: video.videoWidth, height: video.videoHeight };
+      const canvas = canvasRef.current;
+      faceapi.matchDimensions(canvas, dims);
+      const resized = faceapi.resizeResults(detections, dims);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      faceapi.draw.drawDetections(canvas, resized);
+      faceapi.draw.drawFaceLandmarks(canvas, resized);
+      setFaceDetected(detections.length === 1);
+    } catch {
+      // Silently ignore transient errors (null bounding box on first frames)
+    }
   }, [modelsLoaded]);
 
   useEffect(() => {
@@ -59,9 +67,10 @@ const WebcamCapture = ({ onCapture, buttonLabel }) => {
 
   const handleCapture = async () => {
     if (!webcamRef.current?.video || !faceDetected) return;
+    const video = webcamRef.current.video;
+    if (video.readyState !== 4 || video.videoWidth === 0) return;
     setCapturing(true);
     try {
-      const video = webcamRef.current.video;
       const result = await faceapi
         .detectSingleFace(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
         .withFaceLandmarks()
