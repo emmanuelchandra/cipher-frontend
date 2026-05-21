@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,16 +10,17 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import anime from 'animejs/lib/anime.es.js';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
-const StatCard = ({ label, value, sub, color }) => (
+// valueRef → anime owns the innerHTML; React never writes the number itself
+const StatCard = ({ label, valueRef, color }) => (
   <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 border-l-4 ${color}`}>
     <p className="text-sm text-gray-500">{label}</p>
-    <p className="text-3xl font-bold text-gray-800 mt-1">{value ?? '—'}</p>
-    {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <p ref={valueRef} className="text-3xl font-bold text-gray-800 mt-1">0</p>
   </div>
 );
 
@@ -28,12 +29,39 @@ const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Refs for stat card number elements
+  const r0 = useRef(null); // total employees
+  const r1 = useRef(null); // present
+  const r2 = useRef(null); // late
+  const r3 = useRef(null); // absent
+
   useEffect(() => {
     api.get('/attendance/dashboard')
       .then(r => setData(r.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // Count-up animation whenever data arrives
+  useEffect(() => {
+    if (!data) return;
+    const pairs = [
+      [r0, data.total_employees],
+      [r1, data.today_present],
+      [r2, data.today_late],
+      [r3, data.today_absent],
+    ];
+    pairs.forEach(([ref, val]) => {
+      if (!ref.current || val == null) return;
+      anime({
+        targets: ref.current,
+        innerHTML: [0, Number(val)],
+        round: 1,
+        duration: 1500,
+        easing: 'easeOutExpo',
+      });
+    });
+  }, [data]);
 
   if (loading) {
     return (
@@ -97,10 +125,10 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Employees" value={data?.total_employees} color="border-blue-500" />
-        <StatCard label="Present Today" value={data?.today_present} color="border-green-500" />
-        <StatCard label="Late Today" value={data?.today_late} color="border-yellow-500" />
-        <StatCard label="Absent Today" value={data?.today_absent} color="border-red-500" />
+        <StatCard label="Total Employees" valueRef={r0} color="border-blue-500" />
+        <StatCard label="Present Today"   valueRef={r1} color="border-green-500" />
+        <StatCard label="Late Today"      valueRef={r2} color="border-yellow-500" />
+        <StatCard label="Absent Today"    valueRef={r3} color="border-red-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import anime from 'animejs/lib/anime.es.js';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 
@@ -8,6 +9,9 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const navRef     = useRef(null);
+  const animatedRef = useRef(false); // run stagger only once per mount
 
   const handleLogout = async () => {
     try { await api.post('/logout'); } catch {}
@@ -28,6 +32,20 @@ const Navbar = () => {
 
   const visible = links.filter(l => hasRole(l.roles));
 
+  // Stagger nav items in on first mount only
+  useEffect(() => {
+    if (!navRef.current || animatedRef.current || visible.length === 0) return;
+    animatedRef.current = true;
+    anime({
+      targets: Array.from(navRef.current.children),
+      translateX: [-20, 0],
+      opacity:    [0, 1],
+      duration:   400,
+      delay:      anime.stagger(60),
+      easing:     'easeOutQuad',
+    });
+  }, [visible.length]);
+
   const linkClass = (to) =>
     `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
       location.pathname === to
@@ -41,7 +59,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <span className="text-white text-xl font-bold tracking-widest">CIPHER</span>
-            <div className="hidden md:flex ml-8 space-x-1">
+            <div ref={navRef} className="hidden md:flex ml-8 space-x-1">
               {visible.map(l => (
                 <Link key={l.to} to={l.to} className={linkClass(l.to)}>{l.label}</Link>
               ))}
