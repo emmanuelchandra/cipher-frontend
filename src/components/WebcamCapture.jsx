@@ -41,20 +41,28 @@ const WebcamCapture = ({ onCapture, buttonLabel }) => {
         .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
         .withFaceLandmarks();
 
-      // Guard again — video may have been torn down while awaiting
+      // Re-check after await — canvas/video may be gone or dimensions reset
       if (!canvasRef.current) return;
+      if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+      // Filter out any detections with null bounding box coordinates
+      // (face-api.js occasionally returns these on the first frames)
+      const valid = detections.filter(d => {
+        const b = d.detection?.box;
+        return b && b.x != null && b.y != null && b.width != null && b.height != null;
+      });
 
       const dims = { width: video.videoWidth, height: video.videoHeight };
       const canvas = canvasRef.current;
       faceapi.matchDimensions(canvas, dims);
-      const resized = faceapi.resizeResults(detections, dims);
+      const resized = faceapi.resizeResults(valid, dims);
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       faceapi.draw.drawDetections(canvas, resized);
       faceapi.draw.drawFaceLandmarks(canvas, resized);
-      setFaceDetected(detections.length === 1);
+      setFaceDetected(valid.length === 1);
     } catch {
-      // Silently ignore transient errors (null bounding box on first frames)
+      // Silently ignore any remaining transient errors
     }
   }, [modelsLoaded]);
 
