@@ -155,7 +155,7 @@ const CursorCharacter = () => {
       img.src             = src;
       img.style.left      = `${r.charX}px`;
       img.style.width     = `${frameW}px`;
-      img.style.transform = `translateX(-50%) scaleX(${r.facingRight ? 1 : -1})`;
+      img.style.transform = `translateX(-50%) scaleX(${r.facingRight ? -1 : 1})`;
 
       r.raf = requestAnimationFrame(tick);
     };
