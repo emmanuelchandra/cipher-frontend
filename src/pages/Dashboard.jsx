@@ -60,7 +60,7 @@ const Dashboard = () => {
   // Count-up runs after loading is done (so StatCards are mounted and refs exist)
   useEffect(() => {
     if (loading || !data) return;
-    const pairs = [
+const pairs = [
       [r0, data.total_employees],
       [r1, data.today_present],
       [r2, data.today_late],
