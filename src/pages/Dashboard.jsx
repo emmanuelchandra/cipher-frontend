@@ -42,9 +42,9 @@ const Dashboard = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  // Count-up animation whenever data arrives
+  // Count-up runs after loading is done (so StatCards are mounted and refs exist)
   useEffect(() => {
-    if (!data) return;
+    if (loading || !data) return;
     const pairs = [
       [r0, data.total_employees],
       [r1, data.today_present],
@@ -61,7 +61,7 @@ const Dashboard = () => {
         easing: 'easeOutExpo',
       });
     });
-  }, [data]);
+  }, [loading, data]);
 
   if (loading) {
     return (
